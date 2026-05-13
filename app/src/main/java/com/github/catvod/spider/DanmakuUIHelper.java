@@ -108,6 +108,8 @@ public class DanmakuUIHelper {
      */
     private static List<DanmakuItem> currentItems = new ArrayList<>();
     private static String currentSearchKeyword = "";
+    private static final int SIMPLE_SOURCE_TAB_LIMIT = 3;
+    private static final int SIMPLE_RESULT_COUNT_LIMIT = 36;
 
 
     // 显示配置对话框
@@ -1649,6 +1651,7 @@ public class DanmakuUIHelper {
                     LinearLayout.LayoutParams tabContainerParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dpToPx(activity, 62));
                     tabContainerParams.setMargins(0, dpToPx(activity, 2), 0, dpToPx(activity, 8));
                     tabContainer.setLayoutParams(tabContainerParams);
+                    tabContainer.setVisibility(View.GONE);
                     mainLayout.addView(tabContainer);
 
                     ScrollView resultScroll = new ScrollView(activity);
@@ -1708,6 +1711,7 @@ public class DanmakuUIHelper {
 
                             resultContainer.removeAllViews();
                             tabContainer.removeAllViews();
+                            tabContainer.setVisibility(View.GONE);
                             TextView loading = new TextView(activity);
                             loading.setText("正在搜索: " + keyword);
                             loading.setGravity(Gravity.CENTER);
@@ -1739,6 +1743,7 @@ public class DanmakuUIHelper {
                                             tabContainer.removeAllViews();
 
                                             if (results.isEmpty()) {
+                                                tabContainer.setVisibility(View.GONE);
                                                 TextView empty = new TextView(activity);
                                                 empty.setText("未找到结果");
                                                 empty.setGravity(Gravity.CENTER);
@@ -1761,7 +1766,7 @@ public class DanmakuUIHelper {
                                             java.util.Collections.sort(tabs);
 
                                             int selectedTabIndex = findInitialSearchTabIndex(tabs, groupedResults);
-                                            renderSearchSourcePager(tabContainer, resultContainer, groupedResults, tabs,
+                                            renderSearchSourceSelector(tabContainer, resultContainer, groupedResults, tabs,
                                                     selectedTabIndex, activity, dialog, isTemplate3);
                                         }
                                     });
@@ -1814,6 +1819,137 @@ public class DanmakuUIHelper {
         return 0;
     }
 
+    private static void renderSearchSourceSelector(LinearLayout tabContainer,
+                                                   LinearLayout resultContainer,
+                                                   java.util.Map<String, List<DanmakuItem>> groupedResults,
+                                                   List<String> tabs,
+                                                   int selectedIndex,
+                                                   Activity activity,
+                                                   AlertDialog dialog,
+                                                   boolean isTemplate3) {
+        tabContainer.removeAllViews();
+        if (tabs == null || tabs.isEmpty()) {
+            tabContainer.setVisibility(View.GONE);
+            resultContainer.removeAllViews();
+            return;
+        }
+
+        int selected = Math.max(0, Math.min(selectedIndex, tabs.size() - 1));
+        if (tabs.size() == 1) {
+            tabContainer.setVisibility(View.GONE);
+            showResultsForTab(resultContainer, groupedResults.get(tabs.get(selected)), activity, dialog);
+            return;
+        }
+
+        tabContainer.setVisibility(View.VISIBLE);
+        if (shouldUseSimpleSearchTabs(tabs, groupedResults)) {
+            updateSearchSourceContainerHeight(tabContainer, activity, 48);
+            renderSearchSourceTabs(tabContainer, resultContainer, groupedResults, tabs,
+                    selected, activity, dialog, isTemplate3);
+        } else {
+            updateSearchSourceContainerHeight(tabContainer, activity, 48);
+            renderSearchSourcePager(tabContainer, resultContainer, groupedResults, tabs,
+                    selected, activity, dialog, isTemplate3);
+        }
+    }
+
+    private static boolean shouldUseSimpleSearchTabs(List<String> tabs,
+                                                     java.util.Map<String, List<DanmakuItem>> groupedResults) {
+        return tabs != null
+                && tabs.size() > 1
+                && tabs.size() <= SIMPLE_SOURCE_TAB_LIMIT
+                && getTotalSearchResultCount(tabs, groupedResults) <= SIMPLE_RESULT_COUNT_LIMIT;
+    }
+
+    private static int getTotalSearchResultCount(List<String> tabs,
+                                                 java.util.Map<String, List<DanmakuItem>> groupedResults) {
+        if (tabs == null || groupedResults == null) return 0;
+        int count = 0;
+        for (String tab : tabs) {
+            List<DanmakuItem> items = groupedResults.get(tab);
+            if (items != null) count += items.size();
+        }
+        return count;
+    }
+
+    private static void updateSearchSourceContainerHeight(LinearLayout tabContainer, Activity activity, int heightDp) {
+        ViewGroup.LayoutParams params = tabContainer.getLayoutParams();
+        if (params != null) {
+            params.height = dpToPx(activity, heightDp);
+            tabContainer.setLayoutParams(params);
+        }
+    }
+
+    private static void renderSearchSourceTabs(LinearLayout tabContainer,
+                                               LinearLayout resultContainer,
+                                               java.util.Map<String, List<DanmakuItem>> groupedResults,
+                                               List<String> tabs,
+                                               int selectedIndex,
+                                               Activity activity,
+                                               AlertDialog dialog,
+                                               boolean isTemplate3) {
+        tabContainer.removeAllViews();
+        int selected = Math.max(0, Math.min(selectedIndex, tabs.size() - 1));
+        for (int i = 0; i < tabs.size(); i++) {
+            String tabName = tabs.get(i);
+            Button tabBtn = createSearchSourceTabButton(activity, tabName, i == selected, isTemplate3);
+            LinearLayout.LayoutParams tabParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1);
+            tabParams.setMargins(dpToPx(activity, 5), 0, dpToPx(activity, 5), 0);
+            tabBtn.setLayoutParams(tabParams);
+
+            final int targetIndex = i;
+            tabBtn.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    renderSearchSourceSelector(tabContainer, resultContainer, groupedResults, tabs,
+                            targetIndex, activity, dialog, isTemplate3);
+                }
+            });
+            tabContainer.addView(tabBtn);
+        }
+
+        showResultsForTab(resultContainer, groupedResults.get(tabs.get(selected)), activity, dialog);
+    }
+
+    private static Button createSearchSourceTabButton(Activity activity, String text, boolean isActive, boolean isTemplate3) {
+        Button button = new Button(activity);
+        button.setText(text);
+        button.setTextSize(14);
+        button.setTypeface(null, android.graphics.Typeface.BOLD);
+        button.setGravity(Gravity.CENTER);
+        button.setSingleLine(true);
+        button.setEllipsize(TextUtils.TruncateAt.END);
+        button.setAllCaps(false);
+        button.setFocusable(true);
+        button.setFocusableInTouchMode(true);
+        button.setPadding(dpToPx(activity, 10), 0, dpToPx(activity, 10), 0);
+        button.setTag(Boolean.valueOf(isActive));
+        updateSearchSourceTabStyle(button, isActive, isTemplate3, false);
+
+        button.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+            @Override
+            public void onFocusChange(View v, boolean hasFocus) {
+                Object tag = v.getTag();
+                boolean active = tag instanceof Boolean && (Boolean) tag;
+                updateSearchSourceTabStyle((Button) v, active, isTemplate3, hasFocus);
+            }
+        });
+        return button;
+    }
+
+    private static void updateSearchSourceTabStyle(Button button, boolean isActive, boolean isTemplate3, boolean hasFocus) {
+        int color;
+        if (isTemplate3) {
+            color = hasFocus ? DARK_PRIMARY_DARK : (isActive ? DARK_PRIMARY_COLOR : DARK_INACTIVE);
+            button.setTextColor(DARK_TEXT_PRIMARY);
+            button.setBackground(createRoundedTransparentDrawable(color));
+        } else {
+            color = hasFocus ? PRIMARY_DARK : (isActive ? PRIMARY_COLOR : GRAY_INACTIVE);
+            button.setTextColor(Color.WHITE);
+            button.setBackground(createRoundedBackgroundDrawable(color));
+        }
+    }
+
     private static void renderSearchSourcePager(LinearLayout tabContainer,
                                                 LinearLayout resultContainer,
                                                 java.util.Map<String, List<DanmakuItem>> groupedResults,
@@ -1831,7 +1967,6 @@ public class DanmakuUIHelper {
         final int selected = Math.max(0, Math.min(selectedIndex, tabs.size() - 1));
         final String tabName = tabs.get(selected);
         List<DanmakuItem> selectedItems = groupedResults.get(tabName);
-        int itemCount = selectedItems != null ? selectedItems.size() : 0;
         boolean canCycle = tabs.size() > 1;
 
         final Runnable prevAction = new Runnable() {
@@ -1839,7 +1974,7 @@ public class DanmakuUIHelper {
             public void run() {
                 if (!canCycle) return;
                 int target = selected > 0 ? selected - 1 : tabs.size() - 1;
-                renderSearchSourcePager(tabContainer, resultContainer, groupedResults, tabs,
+                renderSearchSourceSelector(tabContainer, resultContainer, groupedResults, tabs,
                         target, activity, dialog, isTemplate3);
             }
         };
@@ -1849,20 +1984,28 @@ public class DanmakuUIHelper {
             public void run() {
                 if (!canCycle) return;
                 int target = selected < tabs.size() - 1 ? selected + 1 : 0;
-                renderSearchSourcePager(tabContainer, resultContainer, groupedResults, tabs,
+                renderSearchSourceSelector(tabContainer, resultContainer, groupedResults, tabs,
                         target, activity, dialog, isTemplate3);
+            }
+        };
+
+        final Runnable chooseAction = new Runnable() {
+            @Override
+            public void run() {
+                showSearchSourceChooser(tabContainer, resultContainer, groupedResults, tabs,
+                        selected, activity, dialog, isTemplate3);
             }
         };
 
         Button prevBtn = createSearchPagerArrowButton(activity, "<", isTemplate3, canCycle);
         Button centerBtn = createSearchPagerCenterButton(activity, tabName,
-                "线路 " + (selected + 1) + "/" + tabs.size() + " · " + itemCount + "集",
+                "来源 " + (selected + 1) + "/" + tabs.size(),
                 isTemplate3);
         Button nextBtn = createSearchPagerArrowButton(activity, ">", isTemplate3, canCycle);
 
         prevBtn.setOnClickListener(v -> prevAction.run());
         nextBtn.setOnClickListener(v -> nextAction.run());
-        attachSearchPagerNavigation(centerBtn, prevAction, nextAction, canCycle);
+        attachSearchPagerNavigation(centerBtn, prevAction, nextAction, chooseAction, canCycle);
 
         LinearLayout.LayoutParams arrowParams = new LinearLayout.LayoutParams(dpToPx(activity, 54), ViewGroup.LayoutParams.MATCH_PARENT);
         arrowParams.setMargins(dpToPx(activity, 4), 0, dpToPx(activity, 4), 0);
@@ -1909,17 +2052,17 @@ public class DanmakuUIHelper {
 
     private static Button createSearchPagerCenterButton(Activity activity, String title, String summary, boolean isTemplate3) {
         Button button = new Button(activity);
-        button.setText(title + "\n" + summary);
+        button.setText(title + "  " + summary);
         button.setTextSize(14);
         button.setTypeface(null, android.graphics.Typeface.BOLD);
         button.setGravity(Gravity.CENTER);
-        button.setSingleLine(false);
-        button.setMaxLines(2);
+        button.setSingleLine(true);
+        button.setMaxLines(1);
         button.setEllipsize(TextUtils.TruncateAt.END);
         button.setAllCaps(false);
         button.setFocusable(true);
         button.setFocusableInTouchMode(true);
-        button.setPadding(dpToPx(activity, 12), dpToPx(activity, 4), dpToPx(activity, 12), dpToPx(activity, 4));
+        button.setPadding(dpToPx(activity, 12), 0, dpToPx(activity, 12), 0);
         button.setTextColor(isTemplate3 ? DARK_TEXT_PRIMARY : Color.WHITE);
         button.setBackground(isTemplate3 ?
                 createRoundedTransparentDrawable(DARK_PRIMARY_COLOR) :
@@ -1934,12 +2077,138 @@ public class DanmakuUIHelper {
         return button;
     }
 
+    private static void showSearchSourceChooser(LinearLayout tabContainer,
+                                                LinearLayout resultContainer,
+                                                java.util.Map<String, List<DanmakuItem>> groupedResults,
+                                                List<String> tabs,
+                                                int selectedIndex,
+                                                Activity activity,
+                                                AlertDialog parentDialog,
+                                                boolean isTemplate3) {
+        if (tabs == null || tabs.isEmpty()) return;
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(activity);
+        LinearLayout mainLayout = new LinearLayout(activity);
+        mainLayout.setOrientation(LinearLayout.VERTICAL);
+        mainLayout.setBackgroundColor(isTemplate3 ? DARK_BG_PRIMARY : BACKGROUND_WHITE);
+        mainLayout.setPadding(dpToPx(activity, 14), dpToPx(activity, 12), dpToPx(activity, 14), dpToPx(activity, 12));
+
+        TextView title = new TextView(activity);
+        title.setText("选择来源（共 " + tabs.size() + " 个来源）");
+        title.setTextSize(16);
+        title.setTypeface(null, android.graphics.Typeface.BOLD);
+        title.setTextColor(isTemplate3 ? DARK_TEXT_PRIMARY : PRIMARY_COLOR);
+        title.setGravity(Gravity.CENTER);
+        title.setPadding(0, 0, 0, dpToPx(activity, 8));
+        mainLayout.addView(title);
+
+        ScrollView scrollView = new ScrollView(activity);
+        GridLayout gridLayout = new GridLayout(activity);
+        DisplayMetrics displayMetrics = activity.getResources().getDisplayMetrics();
+        int screenWidthDp = (int) (displayMetrics.widthPixels / displayMetrics.density);
+        int columns = screenWidthDp >= 1200 ? 4 : (screenWidthDp >= 760 ? 3 : (screenWidthDp >= 520 ? 2 : 1));
+        gridLayout.setColumnCount(columns);
+        gridLayout.setUseDefaultMargins(false);
+        gridLayout.setPadding(0, 0, 0, 0);
+        scrollView.addView(gridLayout);
+
+        final AlertDialog chooserDialog = builder.setView(mainLayout).create();
+        if (isTemplate3 && chooserDialog.getWindow() != null) {
+            chooserDialog.getWindow().setBackgroundDrawable(new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT));
+        }
+
+        int selected = Math.max(0, Math.min(selectedIndex, tabs.size() - 1));
+        for (int i = 0; i < tabs.size(); i++) {
+            String tabName = tabs.get(i);
+            Button sourceBtn = createSearchSourceChoiceButton(activity, tabName, i == selected, isTemplate3);
+
+            GridLayout.LayoutParams sourceParams = new GridLayout.LayoutParams();
+            sourceParams.height = dpToPx(activity, 42);
+            if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                sourceParams.width = 0;
+                sourceParams.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f);
+                sourceParams.rowSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f);
+            } else {
+                sourceParams.width = dpToPx(activity, 180);
+            }
+            int margin = dpToPx(activity, 4);
+            sourceParams.setMargins(margin, margin, margin, margin);
+            sourceBtn.setLayoutParams(sourceParams);
+
+            final int targetIndex = i;
+            sourceBtn.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    chooserDialog.dismiss();
+                    renderSearchSourceSelector(tabContainer, resultContainer, groupedResults, tabs,
+                            targetIndex, activity, parentDialog, isTemplate3);
+                }
+            });
+            gridLayout.addView(sourceBtn);
+        }
+        mainLayout.addView(scrollView, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        safeShowDialog(activity, chooserDialog);
+        android.view.Window window = chooserDialog.getWindow();
+        if (window != null) {
+            android.view.WindowManager.LayoutParams lp = new android.view.WindowManager.LayoutParams();
+            lp.copyFrom(window.getAttributes());
+            lp.width = (int) (activity.getResources().getDisplayMetrics().widthPixels * 0.76f);
+            lp.height = ViewGroup.LayoutParams.WRAP_CONTENT;
+            window.setAttributes(lp);
+        }
+    }
+
+    private static Button createSearchSourceChoiceButton(Activity activity,
+                                                        String title,
+                                                        boolean isActive,
+                                                        boolean isTemplate3) {
+        Button button = new Button(activity);
+        button.setText(title);
+        button.setTextSize(13);
+        button.setTypeface(null, android.graphics.Typeface.BOLD);
+        button.setGravity(Gravity.CENTER);
+        button.setSingleLine(true);
+        button.setEllipsize(TextUtils.TruncateAt.END);
+        button.setAllCaps(false);
+        button.setFocusable(true);
+        button.setFocusableInTouchMode(true);
+        button.setPadding(dpToPx(activity, 8), 0, dpToPx(activity, 8), 0);
+        button.setTag(Boolean.valueOf(isActive));
+        updateSearchSourceChoiceStyle(button, isActive, isTemplate3, false);
+
+        button.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+            @Override
+            public void onFocusChange(View v, boolean hasFocus) {
+                Object tag = v.getTag();
+                boolean active = tag instanceof Boolean && (Boolean) tag;
+                updateSearchSourceChoiceStyle((Button) v, active, isTemplate3, hasFocus);
+            }
+        });
+        return button;
+    }
+
+    private static void updateSearchSourceChoiceStyle(Button button, boolean isActive, boolean isTemplate3, boolean hasFocus) {
+        int color;
+        if (isTemplate3) {
+            color = hasFocus ? DARK_PRIMARY_DARK : (isActive ? DARK_PRIMARY_COLOR : DARK_BG_TERTIARY);
+            button.setTextColor(DARK_TEXT_PRIMARY);
+            button.setBackground(createRoundedTransparentDrawable(color));
+        } else {
+            color = hasFocus ? PRIMARY_DARK : (isActive ? PRIMARY_COLOR : 0xFFE8E8E8);
+            button.setTextColor(isActive || hasFocus ? Color.WHITE : TEXT_PRIMARY);
+            button.setBackground(createRoundedBackgroundDrawable(color));
+        }
+    }
+
     private static void attachSearchPagerNavigation(Button centerButton,
                                                     Runnable prevAction,
                                                     Runnable nextAction,
+                                                    Runnable chooseAction,
                                                     boolean canCycle) {
         centerButton.setOnClickListener(v -> {
-            if (canCycle) nextAction.run();
+            if (chooseAction != null) chooseAction.run();
         });
 
         centerButton.setOnKeyListener((v, keyCode, event) -> {
