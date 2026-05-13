@@ -1290,6 +1290,14 @@ public class DanmakuUIHelper {
         return drawable;
     }
 
+    private static android.graphics.drawable.Drawable createRoundedStrokeBackgroundDrawable(int fillColor, int strokeColor, int strokeWidth) {
+        android.graphics.drawable.GradientDrawable drawable = new android.graphics.drawable.GradientDrawable();
+        drawable.setColor(fillColor);
+        drawable.setCornerRadius(12);
+        drawable.setStroke(strokeWidth, strokeColor);
+        return drawable;
+    }
+
     // 创建带边框的圆角背景
     private static android.graphics.drawable.Drawable createRoundedBorderDrawable(int color) {
         android.graphics.drawable.GradientDrawable drawable = new android.graphics.drawable.GradientDrawable();
@@ -2289,6 +2297,9 @@ public class DanmakuUIHelper {
 
         // 用于跟踪当前选中的分组按钮
         final java.util.Map<String, Button> groupButtons = new java.util.HashMap<>();
+        final java.util.List<Button> resultButtons = new java.util.ArrayList<>();
+        final String[] highlightedDanmakuUrl = new String[]{DanmakuManager.lastDanmakuUrl};
+        final boolean[] suppressGroupSelectionClear = new boolean[]{false};
         java.util.List<String> animeTitles = new java.util.ArrayList<>(animeGroups.keySet());
         sortAnimeTitlesByKeyword(animeTitles);
 
@@ -2305,27 +2316,17 @@ public class DanmakuUIHelper {
 
                 // 创建分组按钮
                 Button groupBtn = new Button(activity);
-                groupBtn.setText(animeTitle + " (" + animeItems.size() + "集)");
+                groupBtn.setText(buildGroupHeaderTitle(animeTitle, animeItems.size(), false));
                 groupBtn.setPadding(dpToPx(activity, 20), dpToPx(activity, 12), dpToPx(activity, 20), dpToPx(activity, 12));
                 groupBtn.setTextSize(14);
                 groupBtn.setTypeface(null, android.graphics.Typeface.BOLD);
+                groupBtn.setGravity(Gravity.CENTER);
+                LinearLayout.LayoutParams groupParams = new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                groupParams.setMargins(0, dpToPx(activity, 6), 0, dpToPx(activity, 3));
+                groupBtn.setLayoutParams(groupParams);
 
-                if (isTemplate3) {
-                    groupBtn.setTextColor(DARK_TEXT_PRIMARY);
-                    if (groupsWithLastUrl.contains(animeTitle)) {
-                        groupBtn.setBackground(createRoundedTransparentDrawable(DARK_SECONDARY_COLOR));
-                    } else {
-                        groupBtn.setBackground(createRoundedTransparentDrawable(DARK_BG_SECONDARY));
-                    }
-                } else {
-                    if (groupsWithLastUrl.contains(animeTitle)) {
-                        groupBtn.setBackground(createRoundedBackgroundDrawable(SECONDARY_COLOR));
-                        groupBtn.setTextColor(Color.WHITE);
-                    } else {
-                        groupBtn.setBackground(createRoundedBackgroundDrawable(0xFFE8E8E8));
-                        groupBtn.setTextColor(TEXT_PRIMARY);
-                    }
-                }
+                applyGroupHeaderStyle(groupBtn, groupsWithLastUrl.contains(animeTitle), isTemplate3, false);
 
                 groupBtn.setClickable(true);
                 groupBtn.setFocusable(true);
@@ -2349,36 +2350,10 @@ public class DanmakuUIHelper {
                         }
 
                         if (hasFocus) {
-                            if (isTemplate3) {
-                                v.setBackground(createRoundedTransparentDrawable(DARK_SECONDARY_DARK));
-                                button.setTextColor(DARK_TEXT_PRIMARY);
-                            } else {
-                                v.setBackground(createRoundedBackgroundDrawable(SECONDARY_DARK));
-                                button.setTextColor(Color.WHITE);
-                            }
-                            v.setScaleX(1.06f);
-                            v.setScaleY(1.06f);
+                            applyGroupHeaderStyle(button, true, isTemplate3, true);
                         } else {
                             // 失去焦点时，恢复到原始选中状态颜色
-                            if (groupsWithLastUrl.contains(title)) {
-                                if (isTemplate3) {
-                                    v.setBackground(createRoundedTransparentDrawable(DARK_SECONDARY_COLOR));
-                                    button.setTextColor(DARK_TEXT_PRIMARY);
-                                } else {
-                                    v.setBackground(createRoundedBackgroundDrawable(SECONDARY_COLOR));
-                                    button.setTextColor(Color.WHITE);
-                                }
-                            } else {
-                                if (isTemplate3) {
-                                    v.setBackground(createRoundedTransparentDrawable(DARK_BG_SECONDARY));
-                                    button.setTextColor(DARK_TEXT_PRIMARY);
-                                } else {
-                                    v.setBackground(createRoundedBackgroundDrawable(0xFFE8E8E8));
-                                    button.setTextColor(TEXT_PRIMARY);
-                                }
-                            }
-                            v.setScaleX(1.0f);
-                            v.setScaleY(1.0f);
+                            applyGroupHeaderStyle(button, groupsWithLastUrl.contains(title), isTemplate3, false);
                         }
                     }
                 });
@@ -2395,23 +2370,11 @@ public class DanmakuUIHelper {
                         for (java.util.Map.Entry<String, Button> entry : groupButtons.entrySet()) {
                             Button otherBtn = entry.getValue();
                             if (otherBtn == v) {
-                                if (isTemplate3) {
-                                    otherBtn.setBackground(createRoundedTransparentDrawable(DARK_SECONDARY_COLOR));
-                                    otherBtn.setTextColor(DARK_TEXT_PRIMARY);
-                                } else {
-                                    otherBtn.setBackground(createRoundedBackgroundDrawable(SECONDARY_COLOR));
-                                    otherBtn.setTextColor(Color.WHITE);
-                                }
+                                applyGroupHeaderStyle(otherBtn, true, isTemplate3, false);
                                 groupsWithLastUrl.clear();
                                 groupsWithLastUrl.add(entry.getKey());
                             } else {
-                                if (isTemplate3) {
-                                    otherBtn.setBackground(createRoundedTransparentDrawable(DARK_BG_SECONDARY));
-                                    otherBtn.setTextColor(DARK_TEXT_PRIMARY);
-                                } else {
-                                    otherBtn.setBackground(createRoundedBackgroundDrawable(0xFFE8E8E8));
-                                    otherBtn.setTextColor(TEXT_PRIMARY);
-                                }
+                                applyGroupHeaderStyle(otherBtn, false, isTemplate3, false);
                             }
                         }
 
@@ -2429,7 +2392,7 @@ public class DanmakuUIHelper {
                             currentStateInfo[0] = 0; // 未展开
                             currentStateInfo[1] = 0; // 子项数量
                             currentStateInfo[2] = null; // 清空网格容器引用
-                            groupBtn.setText(animeTitle + " (" + animeItems.size() + "集)");
+                            groupBtn.setText(buildGroupHeaderTitle(animeTitle, animeItems.size(), false));
                         } else {
                             // 展开内容 - 创建网格布局
                             int groupBtnIndex = resultContainer.indexOfChild(groupBtn);
@@ -2448,9 +2411,11 @@ public class DanmakuUIHelper {
                             gridLayout.setUseDefaultMargins(false);
                             gridLayout.setPadding(dpToPx(activity, 20), dpToPx(activity, 12),
                                     dpToPx(activity, 20), dpToPx(activity, 12));
-                            if (isTemplate3) {
-                                gridLayout.setBackgroundColor(Color.TRANSPARENT);
-                            }
+                            gridLayout.setBackgroundColor(Color.TRANSPARENT);
+                            LinearLayout.LayoutParams gridParams = new LinearLayout.LayoutParams(
+                                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                            gridParams.setMargins(dpToPx(activity, 36), 0, dpToPx(activity, 36), dpToPx(activity, 8));
+                            gridLayout.setLayoutParams(gridParams);
 
                             // 为每个剧集创建网格按钮
                             for (DanmakuItem item : animeItems) {
@@ -2464,7 +2429,7 @@ public class DanmakuUIHelper {
                             currentStateInfo[0] = 1; // 已展开
                             currentStateInfo[1] = animeItems.size(); // 子项数量
                             currentStateInfo[2] = gridLayout; // 保存网格容器引用
-                            groupBtn.setText(animeTitle + " (" + animeItems.size() + "集) [-]");
+                            groupBtn.setText(buildGroupHeaderTitle(animeTitle, animeItems.size(), true));
                         }
                         groupBtn.setTag(currentStateInfo);
 
@@ -2524,31 +2489,21 @@ public class DanmakuUIHelper {
 
                 if (animeItems.size() == 1) {
                     DanmakuItem item = animeItems.get(0);
-                    Button resultItem = createResultButton(activity, item, dialog, isTemplate3);
+                    Button resultItem = createResultButton(activity, item, dialog, isTemplate3, highlightedDanmakuUrl, resultButtons);
                     resultContainer.addView(resultItem);
                 } else {
                     Button groupBtn = new Button(activity);
-                    groupBtn.setText(animeTitle + " (" + animeItems.size() + "集)");
-                    groupBtn.setPadding(20, 10, 20, 10);
+                    groupBtn.setText(buildGroupHeaderTitle(animeTitle, animeItems.size(), false));
+                    groupBtn.setPadding(dpToPx(activity, 20), dpToPx(activity, 10), dpToPx(activity, 20), dpToPx(activity, 10));
                     groupBtn.setTextSize(14);
                     groupBtn.setTypeface(null, android.graphics.Typeface.BOLD);
+                    groupBtn.setGravity(Gravity.CENTER);
+                    LinearLayout.LayoutParams groupParams = new LinearLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                    groupParams.setMargins(0, dpToPx(activity, 6), 0, dpToPx(activity, 3));
+                    groupBtn.setLayoutParams(groupParams);
 
-                    if (isTemplate3) {
-                        groupBtn.setTextColor(DARK_TEXT_PRIMARY);
-                        if (groupsWithLastUrl.contains(animeTitle)) {
-                            groupBtn.setBackground(createRoundedTransparentDrawable(DARK_SECONDARY_COLOR));
-                        } else {
-                            groupBtn.setBackground(createRoundedTransparentDrawable(DARK_BG_SECONDARY));
-                        }
-                    } else {
-                        if (groupsWithLastUrl.contains(animeTitle)) {
-                            groupBtn.setBackground(createRoundedBackgroundDrawable(SECONDARY_COLOR));
-                            groupBtn.setTextColor(Color.WHITE);
-                        } else {
-                            groupBtn.setBackground(createRoundedBackgroundDrawable(0xFFE8E8E8));
-                            groupBtn.setTextColor(TEXT_PRIMARY);
-                        }
-                    }
+                    applyGroupHeaderStyle(groupBtn, groupsWithLastUrl.contains(animeTitle), isTemplate3, false);
 
                     groupBtn.setClickable(true);
                     groupBtn.setFocusable(true);
@@ -2569,94 +2524,63 @@ public class DanmakuUIHelper {
                             }
 
                             if (hasFocus) {
-                                if (isTemplate3) {
-                                    v.setBackground(createRoundedTransparentDrawable(DARK_SECONDARY_DARK));
-                                    button.setTextColor(DARK_TEXT_PRIMARY);
-                                } else {
-                                    v.setBackground(createRoundedBackgroundDrawable(SECONDARY_DARK));
-                                    button.setTextColor(Color.WHITE);
-                                }
-                                v.setScaleX(1.06f);
-                                v.setScaleY(1.06f);
+                                applyGroupHeaderStyle(button, true, isTemplate3, true);
                             } else {
-                                if (groupsWithLastUrl.contains(title)) {
-                                    if (isTemplate3) {
-                                        v.setBackground(createRoundedTransparentDrawable(DARK_SECONDARY_COLOR));
-                                        button.setTextColor(DARK_TEXT_PRIMARY);
-                                    } else {
-                                        v.setBackground(createRoundedBackgroundDrawable(SECONDARY_COLOR));
-                                        button.setTextColor(Color.WHITE);
-                                    }
-                                } else {
-                                    if (isTemplate3) {
-                                        v.setBackground(createRoundedTransparentDrawable(DARK_BG_SECONDARY));
-                                        button.setTextColor(DARK_TEXT_PRIMARY);
-                                    } else {
-                                        v.setBackground(createRoundedBackgroundDrawable(0xFFE8E8E8));
-                                        button.setTextColor(TEXT_PRIMARY);
-                                    }
-                                }
-                                v.setScaleX(1.0f);
-                                v.setScaleY(1.0f);
+                                applyGroupHeaderStyle(button, groupsWithLastUrl.contains(title), isTemplate3, false);
                             }
                         }
                     });
 
-                    int[] stateInfo = new int[]{0, 0};
+                    Object[] stateInfo = new Object[]{0, null};
                     groupBtn.setTag(stateInfo);
 
                     groupBtn.setOnClickListener(new View.OnClickListener() {
                         @Override
                         public void onClick(View v) {
+                            if (!suppressGroupSelectionClear[0]) {
+                                highlightedDanmakuUrl[0] = "";
+                                refreshResultButtonStyles(resultButtons, highlightedDanmakuUrl[0], isTemplate3);
+                            }
                             for (java.util.Map.Entry<String, Button> entry : groupButtons.entrySet()) {
                                 Button otherBtn = entry.getValue();
                                 if (otherBtn == v) {
-                                    if (isTemplate3) {
-                                        otherBtn.setBackground(createRoundedTransparentDrawable(DARK_SECONDARY_COLOR));
-                                        otherBtn.setTextColor(DARK_TEXT_PRIMARY);
-                                    } else {
-                                        otherBtn.setBackground(createRoundedBackgroundDrawable(SECONDARY_COLOR));
-                                        otherBtn.setTextColor(Color.WHITE);
-                                    }
+                                    applyGroupHeaderStyle(otherBtn, true, isTemplate3, false);
                                     groupsWithLastUrl.clear();
                                     groupsWithLastUrl.add(entry.getKey());
                                 } else {
-                                    if (isTemplate3) {
-                                        otherBtn.setBackground(createRoundedTransparentDrawable(DARK_BG_SECONDARY));
-                                        otherBtn.setTextColor(DARK_TEXT_PRIMARY);
-                                    } else {
-                                        otherBtn.setBackground(createRoundedBackgroundDrawable(0xFFE8E8E8));
-                                        otherBtn.setTextColor(TEXT_PRIMARY);
-                                    }
+                                    applyGroupHeaderStyle(otherBtn, false, isTemplate3, false);
                                 }
                             }
 
-                            int[] currentStateInfo = (int[]) groupBtn.getTag();
-                            boolean isExpanded = currentStateInfo[0] == 1;
+                            Object[] currentStateInfo = (Object[]) groupBtn.getTag();
+                            boolean isExpanded = (Integer) currentStateInfo[0] == 1;
 
                             if (isExpanded) {
-                                int buttonIndex = resultContainer.indexOfChild(groupBtn);
-                                int childCount = currentStateInfo[1];
-                                for (int i = 0; i < childCount; i++) {
-                                    if (buttonIndex + 1 < resultContainer.getChildCount()) {
-                                        resultContainer.removeViewAt(buttonIndex + 1);
-                                    }
+                                View childContainer = (View) currentStateInfo[1];
+                                if (childContainer != null) {
+                                    resultContainer.removeView(childContainer);
                                 }
                                 currentStateInfo[0] = 0;
-                                currentStateInfo[1] = 0;
-                                groupBtn.setText(animeTitle + " (" + animeItems.size() + "集)");
+                                currentStateInfo[1] = null;
+                                groupBtn.setText(buildGroupHeaderTitle(animeTitle, animeItems.size(), false));
                             } else {
                                 int buttonIndex = resultContainer.indexOfChild(groupBtn);
                                 sortResults(animeItems, isReversed);
+                                LinearLayout childContainer = createExpandedResultContainer(activity, isTemplate3);
                                 for (int i = 0; i < animeItems.size(); i++) {
                                     DanmakuItem item = animeItems.get(i);
-                                    Button subItem = createResultButton(activity, item, dialog, isTemplate3);
-                                    subItem.setPadding(40, 8, 20, 8);
-                                    resultContainer.addView(subItem, buttonIndex + 1 + i);
+                                    Button subItem = createResultButton(activity, item, dialog, isTemplate3, highlightedDanmakuUrl, resultButtons);
+                                    subItem.setPadding(dpToPx(activity, 14), dpToPx(activity, 8), dpToPx(activity, 14), dpToPx(activity, 8));
+                                    LinearLayout.LayoutParams subParams = new LinearLayout.LayoutParams(
+                                            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                                    subParams.setMargins(0, dpToPx(activity, 4), 0, dpToPx(activity, 4));
+                                    subItem.setLayoutParams(subParams);
+                                    childContainer.addView(subItem);
                                 }
+                                resultContainer.addView(childContainer, buttonIndex + 1);
                                 currentStateInfo[0] = 1;
-                                currentStateInfo[1] = animeItems.size();
-                                groupBtn.setText(animeTitle + " (" + animeItems.size() + "集) [-]");
+                                currentStateInfo[1] = childContainer;
+                                groupBtn.setText(buildGroupHeaderTitle(animeTitle, animeItems.size(), true));
                             }
                             groupBtn.setTag(currentStateInfo);
 
@@ -2674,26 +2598,21 @@ public class DanmakuUIHelper {
 
                     if (groupsWithLastUrl.contains(animeTitle)) {
                         groupBtn.post(() -> {
+                            suppressGroupSelectionClear[0] = true;
                             groupBtn.performClick();
+                            suppressGroupSelectionClear[0] = false;
                             resultContainer.post(() -> {
-                                View targetView = null;
-                                for (int i = 0; i < resultContainer.getChildCount(); i++) {
-                                    View child = resultContainer.getChildAt(i);
-                                    if (child instanceof Button && child.getTag() instanceof DanmakuItem) {
-                                        DanmakuItem item = (DanmakuItem) child.getTag();
-                                        if (item.getDanmakuUrl() != null && item.getDanmakuUrl().equals(DanmakuManager.lastDanmakuUrl)) {
-                                            targetView = child;
-                                            break;
-                                        }
-                                    }
-                                }
+                                Object[] expandedState = (Object[]) groupBtn.getTag();
+                                View expandedContainer = expandedState[1] instanceof View ? (View) expandedState[1] : resultContainer;
+                                View targetView = findResultButtonByDanmakuUrl(expandedContainer, DanmakuManager.lastDanmakuUrl);
+                                if (targetView != null) targetView.requestFocus();
 
                                 if (resultContainer.getParent() instanceof ScrollView) {
                                     ScrollView scrollView = (ScrollView) resultContainer.getParent();
                                     View finalTargetView = targetView;
                                     scrollView.post(() -> {
                                         if (finalTargetView != null) {
-                                            int scrollY = resultContainer.getTop() + finalTargetView.getTop();
+                                            int scrollY = resultContainer.getTop() + getTopRelativeToAncestor(finalTargetView, resultContainer);
                                             scrollView.smoothScrollTo(0, scrollY);
                                         } else {
                                             int scrollY = resultContainer.getTop() + groupBtn.getTop();
@@ -2709,6 +2628,66 @@ public class DanmakuUIHelper {
         }
 
         resultContainer.setDescendantFocusability(ViewGroup.FOCUS_AFTER_DESCENDANTS);
+    }
+
+    private static String buildGroupHeaderTitle(String title, int count, boolean expanded) {
+        return (expanded ? "[-] " : "[+] ") + title + " (" + count + "集)";
+    }
+
+    private static void applyGroupHeaderStyle(Button button, boolean active, boolean isTemplate3, boolean focused) {
+        if (isTemplate3) {
+            button.setTextColor(DARK_TEXT_PRIMARY);
+            int fillColor = focused || active ? 0x33007AFF : DARK_BG_SECONDARY;
+            int strokeColor = focused ? DARK_HIGHLIGHT_LIGHT : (active ? DARK_HIGHLIGHT : DARK_BORDER);
+            int strokeWidth = focused || active ? 4 : 2;
+            button.setBackground(createRoundedStrokeBackgroundDrawable(fillColor, strokeColor, strokeWidth));
+        } else {
+            button.setTextColor(TEXT_PRIMARY);
+            int fillColor = focused || active ? 0xFFEAF2FF : 0xFFE8E8E8;
+            int strokeColor = focused ? PRIMARY_DARK : (active ? PRIMARY_COLOR : 0xFFD6D6D6);
+            int strokeWidth = focused || active ? 4 : 2;
+            button.setBackground(createRoundedStrokeBackgroundDrawable(fillColor, strokeColor, strokeWidth));
+        }
+    }
+
+    private static LinearLayout createExpandedResultContainer(Activity activity, boolean isTemplate3) {
+        LinearLayout childContainer = new LinearLayout(activity);
+        childContainer.setOrientation(LinearLayout.VERTICAL);
+        childContainer.setPadding(0, dpToPx(activity, 2), 0, dpToPx(activity, 2));
+        childContainer.setBackgroundColor(Color.TRANSPARENT);
+
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.setMargins(dpToPx(activity, 36), 0, dpToPx(activity, 36), 0);
+        childContainer.setLayoutParams(params);
+        return childContainer;
+    }
+
+    private static View findResultButtonByDanmakuUrl(View root, String danmakuUrl) {
+        if (root == null || TextUtils.isEmpty(danmakuUrl)) return null;
+        if (root instanceof Button && root.getTag() instanceof DanmakuItem) {
+            DanmakuItem item = (DanmakuItem) root.getTag();
+            if (danmakuUrl.equals(item.getDanmakuUrl())) return root;
+        }
+        if (root instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) root;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View result = findResultButtonByDanmakuUrl(group.getChildAt(i), danmakuUrl);
+                if (result != null) return result;
+            }
+        }
+        return null;
+    }
+
+    private static int getTopRelativeToAncestor(View view, ViewGroup ancestor) {
+        int top = 0;
+        View current = view;
+        while (current != null && current != ancestor) {
+            top += current.getTop();
+            android.view.ViewParent parent = current.getParent();
+            current = parent instanceof View ? (View) parent : null;
+        }
+        return top;
     }
 
     private static void sortResults(List<DanmakuItem> results, boolean reversed) {
@@ -2866,8 +2845,40 @@ public class DanmakuUIHelper {
         return TextUtils.isEmpty(label) ? "未知源" : label;
     }
 
+    private static void applyResultButtonStyle(Button button, boolean selected, boolean isTemplate3, boolean focused) {
+        if (isTemplate3) {
+            int fillColor = selected || focused ? DARK_TERTIARY_COLOR : DARK_BG_TERTIARY;
+            int strokeColor = focused ? DARK_TERTIARY_DARK : (selected ? DARK_TERTIARY_COLOR : DARK_BORDER);
+            int strokeWidth = focused || selected ? 4 : 2;
+            button.setTextColor(DARK_TEXT_PRIMARY);
+            button.setBackground(createRoundedStrokeBackgroundDrawable(fillColor, strokeColor, strokeWidth));
+        } else {
+            int fillColor = selected ? 0xFFEAF8EF : 0xFFF0F0F0;
+            int strokeColor = focused ? TERTIARY_DARK : (selected ? TERTIARY_COLOR : 0xFFD6D6D6);
+            int strokeWidth = focused || selected ? 4 : 2;
+            button.setTextColor(selected ? 0xFF1F7A3A : TEXT_PRIMARY);
+            button.setBackground(createRoundedStrokeBackgroundDrawable(fillColor, strokeColor, strokeWidth));
+        }
+    }
+
+    private static void refreshResultButtonStyles(List<Button> buttons, String highlightedUrl, boolean isTemplate3) {
+        if (buttons == null) return;
+        for (Button button : buttons) {
+            if (button == null || !(button.getTag() instanceof DanmakuItem)) continue;
+            DanmakuItem item = (DanmakuItem) button.getTag();
+            String itemUrl = item.getDanmakuUrl();
+            boolean selected = !TextUtils.isEmpty(highlightedUrl) && highlightedUrl.equals(itemUrl);
+            applyResultButtonStyle(button, selected, isTemplate3, button.hasFocus());
+        }
+    }
+
     // 创建结果按钮的辅助方法 - 改进版本
-    private static Button createResultButton(Activity activity, DanmakuItem item, AlertDialog dialog, boolean isTemplate3) {
+    private static Button createResultButton(Activity activity,
+                                             DanmakuItem item,
+                                             AlertDialog dialog,
+                                             boolean isTemplate3,
+                                             String[] highlightedDanmakuUrl,
+                                             List<Button> resultButtons) {
         Button resultItem = new Button(activity);
         resultItem.setFocusable(true);
         resultItem.setFocusableInTouchMode(true);
@@ -2875,17 +2886,13 @@ public class DanmakuUIHelper {
         resultItem.setText(buildResultTitleWithSource(activity, item));
         resultItem.setTextSize(13);
         resultItem.setPadding(dpToPx(activity, 14), dpToPx(activity, 10), dpToPx(activity, 14), dpToPx(activity, 10));
+        resultItem.setGravity(Gravity.CENTER);
 
         String currentDanmakuUrl = item.getDanmakuUrl();
-        boolean isSelected = currentDanmakuUrl != null && currentDanmakuUrl.equals(DanmakuManager.lastDanmakuUrl);
+        String highlightedUrl = highlightedDanmakuUrl != null ? highlightedDanmakuUrl[0] : DanmakuManager.lastDanmakuUrl;
+        boolean isSelected = currentDanmakuUrl != null && currentDanmakuUrl.equals(highlightedUrl);
 
-        if (isTemplate3) {
-            resultItem.setTextColor(DARK_TEXT_PRIMARY);
-            resultItem.setBackground(createRoundedTransparentDrawable(isSelected ? DARK_TERTIARY_COLOR : DARK_BG_TERTIARY));
-        } else {
-            resultItem.setTextColor(isSelected ? Color.WHITE : TEXT_PRIMARY);
-            resultItem.setBackground(createRoundedBackgroundDrawable(isSelected ? TERTIARY_COLOR : 0xFFF0F0F0));
-        }
+        applyResultButtonStyle(resultItem, isSelected, isTemplate3, false);
 
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -2893,34 +2900,20 @@ public class DanmakuUIHelper {
         resultItem.setLayoutParams(params);
 
         resultItem.setTag(item);
+        if (resultButtons != null) resultButtons.add(resultItem);
 
         resultItem.setOnFocusChangeListener(new View.OnFocusChangeListener() {
             @Override
             public void onFocusChange(View v, boolean hasFocus) {
                 DanmakuItem item_tag = (DanmakuItem) v.getTag();
                 String danmakuUrl = item_tag.getDanmakuUrl();
-                boolean isCurrentlySelected = danmakuUrl != null && danmakuUrl.equals(DanmakuManager.lastDanmakuUrl);
+                String highlightedUrl = highlightedDanmakuUrl != null ? highlightedDanmakuUrl[0] : DanmakuManager.lastDanmakuUrl;
+                boolean isCurrentlySelected = danmakuUrl != null && danmakuUrl.equals(highlightedUrl);
 
                 if (hasFocus) {
-                    if (isTemplate3) {
-                        v.setBackground(createRoundedTransparentDrawable(DARK_TERTIARY_DARK));
-                        ((Button) v).setTextColor(DARK_TEXT_PRIMARY);
-                    } else {
-                        v.setBackground(createRoundedBackgroundDrawable(TERTIARY_DARK));
-                        ((Button) v).setTextColor(Color.WHITE);
-                    }
-                    v.setScaleX(1.06f);
-                    v.setScaleY(1.06f);
+                    applyResultButtonStyle((Button) v, isCurrentlySelected, isTemplate3, true);
                 } else {
-                    if (isTemplate3) {
-                        v.setBackground(createRoundedTransparentDrawable(isCurrentlySelected ? DARK_TERTIARY_COLOR : DARK_BG_TERTIARY));
-                        ((Button) v).setTextColor(DARK_TEXT_PRIMARY);
-                    } else {
-                        v.setBackground(createRoundedBackgroundDrawable(isCurrentlySelected ? TERTIARY_COLOR : 0xFFF0F0F0));
-                        ((Button) v).setTextColor(isCurrentlySelected ? Color.WHITE : TEXT_PRIMARY);
-                    }
-                    v.setScaleX(1.0f);
-                    v.setScaleY(1.0f);
+                    applyResultButtonStyle((Button) v, isCurrentlySelected, isTemplate3, false);
                 }
             }
         });
@@ -2929,6 +2922,10 @@ public class DanmakuUIHelper {
             @Override
             public void onClick(View v1) {
                 DanmakuItem selected = (DanmakuItem) v1.getTag();
+                if (highlightedDanmakuUrl != null) {
+                    highlightedDanmakuUrl[0] = selected.getDanmakuUrl();
+                    refreshResultButtonStyles(resultButtons, highlightedDanmakuUrl[0], isTemplate3);
+                }
                 // 记录弹幕URL
                 DanmakuSpider.recordDanmakuUrl(selected, false);
                 LeoDanmakuService.pushDanmakuDirect(selected, activity, false);
