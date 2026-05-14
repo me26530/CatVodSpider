@@ -24,6 +24,7 @@ public class DanmakuManager {
     public static long lastVideoDetectedTime = 0;     // 上次检测到视频的时间
 
     public static void recordDanmakuUrl(DanmakuItem danmakuItem, boolean isAuto) {
+        if (danmakuItem == null) return;
         if (isAuto) {
             lastAutoDanmakuUrl = danmakuItem.getDanmakuUrl();
             DanmakuSpider.log("记录自动弹幕URL: " + danmakuItem.getDanmakuUrl());
@@ -32,7 +33,7 @@ public class DanmakuManager {
             DanmakuSpider.log("记录手动弹幕URL: " + danmakuItem.getDanmakuUrl());
         }
         lastDanmakuUrl = danmakuItem.getDanmakuUrl();
-        lastDanmakuId = danmakuItem.getEpId();
+        lastDanmakuId = danmakuItem.getEpId() != null ? danmakuItem.getEpId() : -1;
         if (danmakuItem.getEpId() != null) {
             lastDanmakuItemMap.put(danmakuItem.getEpId(), danmakuItem);
         }
@@ -61,7 +62,8 @@ public class DanmakuManager {
             return null;
         }
 
-        DanmakuItem nextDanmakuItem = lastDanmakuItemMap.get(nextId);
+        DanmakuItem lastItem = getLastDanmakuItem();
+        DanmakuItem nextDanmakuItem = findContinuationItemById(nextId, lastItem);
         if (nextDanmakuItem != null) {
             DanmakuSpider.log("✅ 获取到下一个弹幕弹幕信息: " + nextDanmakuItem.toString());
             return nextDanmakuItem;
@@ -82,7 +84,8 @@ public class DanmakuManager {
         if (item == null || item.getEpId() == null || TextUtils.isEmpty(item.getApiBase())) return;
         String titleKey = normalizeSeriesKey(getItemSeriesName(item));
         if (TextUtils.isEmpty(titleKey)) return;
-        seriesDanmakuCache.put(titleKey + "#" + item.getApiBase() + "#" + item.getEpId(), item);
+        String sourceKey = normalizeSourceKey(item.getFrom());
+        seriesDanmakuCache.put(titleKey + "#" + sourceKey + "#" + item.getApiBase() + "#" + item.getEpId(), item);
     }
 
     public static List<DanmakuItem> getSeriesCacheSnapshot() {
@@ -104,21 +107,88 @@ public class DanmakuManager {
                 .toLowerCase();
     }
 
+    public static String normalizeSourceKey(String source) {
+        if (TextUtils.isEmpty(source)) return "";
+        return source
+                .replaceAll("(?i)^\\s*from\\s*", "")
+                .replaceAll("[\\s\\p{Punct}，。；：、【】《》“”‘’（）]+", "")
+                .toLowerCase();
+    }
+
+    public static boolean hasDanmakuSource(DanmakuItem item) {
+        return item != null && !TextUtils.isEmpty(normalizeSourceKey(item.getFrom()));
+    }
+
+    public static boolean isSameDanmakuSource(DanmakuItem item, DanmakuItem reference) {
+        String referenceSource = reference != null ? normalizeSourceKey(reference.getFrom()) : "";
+        if (TextUtils.isEmpty(referenceSource)) return true;
+        String itemSource = item != null ? normalizeSourceKey(item.getFrom()) : "";
+        return referenceSource.equals(itemSource);
+    }
+
+    public static String getDisplaySource(DanmakuItem item) {
+        if (item == null || TextUtils.isEmpty(item.getFrom())) return "默认";
+        return item.getFrom();
+    }
+
     public static DanmakuItem getLastDanmakuItem() {
+        if (lastDanmakuUrl != null && !lastDanmakuUrl.isEmpty()) {
+            DanmakuItem item = lastDanmakuUrlItemMap.get(lastDanmakuUrl);
+            if (item != null) return item;
+
+            for (DanmakuItem cachedItem : lastDanmakuUrlItemMap.values()) {
+                if (cachedItem != null && lastDanmakuUrl.equals(cachedItem.getDanmakuUrl())) {
+                    return cachedItem;
+                }
+            }
+
+            for (DanmakuItem cachedItem : lastDanmakuItemMap.values()) {
+                if (cachedItem != null && lastDanmakuUrl.equals(cachedItem.getDanmakuUrl())) {
+                    return cachedItem;
+                }
+            }
+        }
+
         if (lastDanmakuId > 0) {
             DanmakuItem item = lastDanmakuItemMap.get(lastDanmakuId);
             if (item != null) return item;
         }
 
-        if (lastDanmakuUrl != null && !lastDanmakuUrl.isEmpty()) {
-            for (DanmakuItem item : lastDanmakuItemMap.values()) {
-                if (item != null && lastDanmakuUrl.equals(item.getDanmakuUrl())) {
-                    return item;
-                }
+        return null;
+    }
+
+    private static DanmakuItem findContinuationItemById(int epId, DanmakuItem reference) {
+        DanmakuItem item = lastDanmakuItemMap.get(epId);
+        if (isSameContinuationItem(item, reference)) return item;
+
+        for (DanmakuItem candidate : lastDanmakuItemMap.values()) {
+            if (candidate != null && candidate.getEpId() != null && candidate.getEpId() == epId
+                    && isSameContinuationItem(candidate, reference)) {
+                return candidate;
             }
         }
 
+        for (DanmakuItem candidate : seriesDanmakuCache.values()) {
+            if (candidate != null && candidate.getEpId() != null && candidate.getEpId() == epId
+                    && isSameContinuationItem(candidate, reference)) {
+                return candidate;
+            }
+        }
+
+        if (item != null && reference != null) {
+            DanmakuSpider.log("🧭 ID位移候选来源不一致，跳过: 上一集="
+                    + getDisplaySource(reference) + "，候选=" + getDisplaySource(item));
+        }
         return null;
+    }
+
+    private static boolean isSameContinuationItem(DanmakuItem item, DanmakuItem reference) {
+        if (item == null) return false;
+        if (reference == null) return true;
+        if (!TextUtils.isEmpty(reference.getApiBase()) && !reference.getApiBase().equals(item.getApiBase())) {
+            return false;
+        }
+        return isSameDanmakuSource(item, reference);
     }
 
     public static void resetAutoSearch() {

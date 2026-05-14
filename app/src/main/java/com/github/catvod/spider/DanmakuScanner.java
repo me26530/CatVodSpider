@@ -1373,20 +1373,24 @@ public class DanmakuScanner {
     private static DanmakuItem findCachedDanmakuForEpisode(EpisodeInfo episodeInfo, String previousEpisodeNum, String targetEpisodeNum) {
         if (episodeInfo == null || TextUtils.isEmpty(targetEpisodeNum)) return null;
 
+        DanmakuItem lastItem = DanmakuManager.getLastDanmakuItem();
         DanmakuItem offsetCandidate = getOffsetCachedCandidate(previousEpisodeNum, targetEpisodeNum);
-        if (isCachedItemValidForEpisode(offsetCandidate, episodeInfo, targetEpisodeNum, "ID位移")) {
+        if (isCachedItemValidForEpisode(offsetCandidate, episodeInfo, targetEpisodeNum, "ID位移", lastItem)) {
             return offsetCandidate;
         }
 
-        DanmakuItem lastItem = DanmakuManager.getLastDanmakuItem();
         String preferredApiBase = lastItem != null ? lastItem.getApiBase() : "";
         DanmakuItem best = null;
         int bestScore = -1;
 
         for (DanmakuItem item : DanmakuManager.getSeriesCacheSnapshot()) {
-            if (!isCachedItemValidForEpisode(item, episodeInfo, targetEpisodeNum, "缓存扫描")) continue;
+            if (!isCachedItemValidForEpisode(item, episodeInfo, targetEpisodeNum, "缓存扫描", lastItem)) continue;
 
             int score = 0;
+            if (lastItem != null && DanmakuManager.hasDanmakuSource(lastItem)
+                    && DanmakuManager.isSameDanmakuSource(item, lastItem)) {
+                score += 50;
+            }
             if (!TextUtils.isEmpty(preferredApiBase) && preferredApiBase.equals(item.getApiBase())) score += 20;
             if (item.getEpId() != null && offsetCandidate != null && offsetCandidate.getEpId() != null
                     && item.getEpId().equals(offsetCandidate.getEpId())) {
@@ -1411,12 +1415,22 @@ public class DanmakuScanner {
         return DanmakuManager.getNextDanmakuItem(previous, target);
     }
 
-    private static boolean isCachedItemValidForEpisode(DanmakuItem item, EpisodeInfo episodeInfo, String targetEpisodeNum, String source) {
+    private static boolean isCachedItemValidForEpisode(DanmakuItem item, EpisodeInfo episodeInfo, String targetEpisodeNum, String source, DanmakuItem lastItem) {
         if (item == null || item.getEpId() == null || TextUtils.isEmpty(item.getApiBase())) return false;
         boolean logReject = !"缓存扫描".equals(source);
 
         if (!isCachedItemSameSeries(item, episodeInfo)) {
             if (logReject) DanmakuSpider.log("🧪 缓存候选拒绝(" + source + "): 剧名不匹配 - " + item.toString());
+            return false;
+        }
+
+        if (lastItem != null && DanmakuManager.hasDanmakuSource(lastItem)
+                && !DanmakuManager.isSameDanmakuSource(item, lastItem)) {
+            if (logReject) {
+                DanmakuSpider.log("🧪 缓存候选拒绝(" + source + "): 来源不一致，上一集="
+                        + DanmakuManager.getDisplaySource(lastItem) + "，候选="
+                        + DanmakuManager.getDisplaySource(item) + " - " + item.toString());
+            }
             return false;
         }
 

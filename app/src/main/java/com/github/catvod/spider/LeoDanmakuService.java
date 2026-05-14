@@ -385,6 +385,7 @@ public class LeoDanmakuService {
         item.episodeCount = firstPositive(episodeCount,
                 optInt(anime, "episodeCount", "episodesCount", "episodeTotal", "episodesTotal", "total"),
                 optInt(ep, "episodeCount", "episodesCount", "episodeTotal", "episodesTotal", "total"));
+        String explicitFrom = firstOptString(anime, ep, "from", "source", "site", "provider", "platform");
 
         String[] parts = animeTitle.split("(?i)from"); // 使用不区分大小写的正则表达式
         if (parts.length > 1) {
@@ -392,8 +393,12 @@ public class LeoDanmakuService {
             if (!fromPart.isEmpty()) { // 额外检查分割后的部分是否为空
                 item.from = fromPart;
                 item.animeTitle = parts[0].trim();
+            } else {
+                item.from = explicitFrom;
+                item.animeTitle = parts[0].trim();
             }
         } else {
+            item.from = explicitFrom;
             item.animeTitle = animeTitle;
         }
 
@@ -615,8 +620,12 @@ public class LeoDanmakuService {
         }
 
         List<DanmakuItem> matchedItems = new ArrayList<>();
+        DanmakuItem preferredSourceItem = getPreferredSourceItemForSearch(searchKeyword, episodeInfo);
         boolean hasEpisodeNum = !TextUtils.isEmpty(episodeInfo.getEpisodeNum());
         String episodeRequirement = hasEpisodeNum ? episodeInfo.getEpisodeNum() : "无，启用电影/综艺兜底";
+        if (preferredSourceItem != null) {
+            DanmakuSpider.log("🧭 自动续集匹配锁定上一集来源: " + DanmakuManager.getDisplaySource(preferredSourceItem));
+        }
         DanmakuSpider.log("📥 " + scopeName + " 开始筛选，原始结果数: " + results.size() + "，集数要求: " + episodeRequirement);
         for (int i = 0; i < results.size(); i++) {
             DanmakuItem item = results.get(i);
@@ -684,6 +693,13 @@ public class LeoDanmakuService {
                 isMatch = false;
             }
 
+            if (isMatch && preferredSourceItem != null && !DanmakuManager.isSameDanmakuSource(item, preferredSourceItem)) {
+                DanmakuSpider.log("  ❌ 来源不一致: " + item.title + " - "
+                        + DanmakuManager.getDisplaySource(item) + " (上一集: "
+                        + DanmakuManager.getDisplaySource(preferredSourceItem) + ")");
+                isMatch = false;
+            }
+
             if (isMatch) {
                 DanmakuSpider.log("  ✅ 匹配成功: " + item.title + " - " + item.epTitle);
                 matchedItems.add(item);
@@ -694,6 +710,7 @@ public class LeoDanmakuService {
 
         DanmakuItem selectedItem = null;
         double bestSimilarity = -1.0;
+        int bestSourceScore = -1;
         String bestMatchedName = null; // 记录最佳匹配时使用的名称
 
         // 4. 从筛选结果中选择最佳匹配
@@ -728,8 +745,11 @@ public class LeoDanmakuService {
                 similarity -= 0.5; // 惩罚
             }
 
-            if (similarity > bestSimilarity) {
+            int sourceScore = getPreferredSourceScore(item, preferredSourceItem);
+            if (similarity > bestSimilarity
+                    || (Math.abs(similarity - bestSimilarity) < 0.0001 && sourceScore > bestSourceScore)) {
                 bestSimilarity = similarity;
+                bestSourceScore = sourceScore;
                 selectedItem = item;
                 bestMatchedName = titleToCompare; // 直接记录计算时使用的名称
             }
@@ -799,6 +819,47 @@ public class LeoDanmakuService {
 
     private static String safe(String text) {
         return text == null ? "" : text;
+    }
+
+    private static DanmakuItem getPreferredSourceItemForSearch(String searchKeyword, EpisodeInfo episodeInfo) {
+        DanmakuItem lastItem = DanmakuManager.getLastDanmakuItem();
+        if (lastItem == null || !DanmakuManager.hasDanmakuSource(lastItem)) return null;
+        if (!isSameSearchSeries(lastItem, searchKeyword, episodeInfo)) return null;
+        return lastItem;
+    }
+
+    private static boolean isSameSearchSeries(DanmakuItem item, String searchKeyword, EpisodeInfo episodeInfo) {
+        String itemSeries = DanmakuManager.getItemSeriesName(item);
+        if (matchesSeriesKey(itemSeries, searchKeyword)) return true;
+        if (episodeInfo == null) return false;
+
+        if (matchesSeriesKey(itemSeries, episodeInfo.getSeriesName())) return true;
+
+        List<String> names = episodeInfo.getEpisodeNames();
+        if (names != null) {
+            for (String name : names) {
+                if (matchesSeriesKey(itemSeries, name)) return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean matchesSeriesKey(String left, String right) {
+        String leftKey = DanmakuManager.normalizeSeriesKey(left);
+        String rightKey = DanmakuManager.normalizeSeriesKey(right);
+        if (TextUtils.isEmpty(leftKey) || TextUtils.isEmpty(rightKey)) return false;
+        return leftKey.equals(rightKey) || leftKey.contains(rightKey) || rightKey.contains(leftKey);
+    }
+
+    private static int getPreferredSourceScore(DanmakuItem item, DanmakuItem preferredSourceItem) {
+        if (item == null || preferredSourceItem == null) return 0;
+        int score = 0;
+        if (DanmakuManager.isSameDanmakuSource(item, preferredSourceItem)) score += 20;
+        if (!TextUtils.isEmpty(preferredSourceItem.getApiBase())
+                && preferredSourceItem.getApiBase().equals(item.getApiBase())) {
+            score += 10;
+        }
+        return score;
     }
 
     private static EpisodeInfo copyEpisodeInfoForKeyword(EpisodeInfo source, String keyword) {
